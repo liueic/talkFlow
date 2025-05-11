@@ -5,6 +5,7 @@ import (
 	"log"
 	"talkFlow/config"
 	"talkFlow/models"
+	"talkFlow/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,7 +27,12 @@ func GetProfile(c *gin.Context) {
 	var user models.User
 	err := userCollection.FindOne(ctx, bson.M{"username": username.(string)}).Decode(&user)
 	if err != nil {
-		c.JSON(500, gin.H{"code": 50001, "error": "获取用户信息失败"})
+		logID, _ := utils.Logger(username.(string), err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+		c.JSON(500, gin.H{
+			"code":   50001,
+			"error":  "获取用户信息失败",
+			"log_id": logID.Hex(), // 返回日志ID
+		})
 		log.Println("获取用户信息失败:", err)
 		return
 	}

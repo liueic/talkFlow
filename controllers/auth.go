@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5" // #nosec G501 -- Required for Gravatar hashes, not for security
 	"fmt"
+	"log"
 	"strings"
 	"talkFlow/config"
 	"talkFlow/models"
@@ -122,6 +123,7 @@ func Login(c *gin.Context) {
 	if err != nil {
 		c.JSON(500, gin.H{"code": 50003, "error": "更新登录信息失败"})
 		utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+		log.Println("更新登录信息失败:", err)
 		return
 	}
 

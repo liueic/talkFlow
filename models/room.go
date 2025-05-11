@@ -1,6 +1,10 @@
 package models
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
+import (
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type RoomStatus int
 
@@ -19,4 +23,14 @@ type Room struct {
 	ExpireTime primitive.DateTime `bson:"expire_time"`
 	Status     RoomStatus         `bson:"status"` // 0: 进行中, 1: 已结束
 	IP         string             `bson:"ip"`
+}
+
+func (r *Room) IsOngoing() bool {
+	now := primitive.NewDateTimeFromTime(time.Now())
+	return r.Status == RoomOngoing && now < r.ExpireTime
+}
+
+func (r *Room) IsEnded() bool {
+	now := primitive.NewDateTimeFromTime(time.Now())
+	return r.Status == RoomEnded || now >= r.ExpireTime
 }

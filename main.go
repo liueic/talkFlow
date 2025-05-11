@@ -23,6 +23,8 @@ func main() {
 
 	// 创建房间
 	r.POST("/api/v1/room/create", middleware.JWTAuth(), api.CreateRoom)
+	// 加入房间
+	r.POST("/api/v1/room/join", api.JoinRoom)
 
 	r.Run(":8080")
 }
