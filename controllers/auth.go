@@ -65,7 +65,7 @@ func Register(c *gin.Context) {
 	_, err = userCollection.InsertOne(ctx, user)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 50001, "error": "注册失败"})
-		utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+		_, _ = utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 		return
 	}
 
@@ -105,7 +105,7 @@ func Login(c *gin.Context) {
 	token, err := utils.GenerateToken(user.Username)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 50002, "error": "生成token失败"})
-		utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+		_, _ = utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 		return
 	}
 
@@ -122,7 +122,7 @@ func Login(c *gin.Context) {
 	)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 50003, "error": "更新登录信息失败"})
-		utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+		_, _ = utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 		log.Println("更新登录信息失败:", err)
 		return
 	}

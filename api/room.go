@@ -50,7 +50,7 @@ func CreateRoom(c *gin.Context) {
 			"error": "未授权",
 		})
 		log.Printf("未授权: %s", c.ClientIP())
-		utils.Logger("unknown", "未授权", time.Now().Format(time.RFC3339), c.ClientIP())
+		_, _ = utils.Logger("unknown", "未授权", time.Now().Format(time.RFC3339), c.ClientIP())
 		return
 	}
 
@@ -71,7 +71,7 @@ func CreateRoom(c *gin.Context) {
 	JoinCode := randomJoinCode(5)
 
 	room := models.Room{
-		Creater:    username.(string),
+		Creator:    username.(string),
 		Name:       req.Name,
 		Joiner:     []string{username.(string)},
 		JoinCode:   JoinCode,
@@ -82,9 +82,8 @@ func CreateRoom(c *gin.Context) {
 	}
 
 	_, err = roomCollection.InsertOne(ctx, room)
-
-	logID, _ := utils.Logger(username.(string), err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 	if err != nil {
+		logID, _ := utils.Logger(username.(string), err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 		c.JSON(500, gin.H{
 			"code":   50001,
 			"error":  "创建房间失败",
@@ -93,7 +92,6 @@ func CreateRoom(c *gin.Context) {
 		log.Println("创建房间失败:", err)
 		return
 	}
-
 	c.JSON(200, gin.H{
 		"code":      20000,
 		"message":   "房间创建成功",

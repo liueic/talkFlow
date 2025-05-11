@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"talkFlow/api"
 	"talkFlow/config"
 	"talkFlow/controllers"
@@ -26,5 +27,8 @@ func main() {
 	// 加入房间
 	r.POST("/api/v1/room/join", api.JoinRoom)
 
-	r.Run(":8080")
+	err := r.Run(":8080")
+	if err != nil {
+		log.Fatal("启动服务失败", err)
+	}
 }

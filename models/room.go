@@ -16,7 +16,7 @@ const (
 type Room struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty"`
 	Name       string             `bson:"name"`
-	Creater    string             `bson:"creater"`
+	Creator    string             `bson:"creator"`
 	Joiner     []string           `bson:"joiner"`
 	JoinCode   string             `bson:"join_code"`
 	CreateTime primitive.DateTime `bson:"create_time"`
