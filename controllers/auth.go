@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/md5" // #nosec G501 -- Required for Gravatar hashes, not for security
 	"fmt"
 	"strings"
 	"talkFlow/config"
@@ -43,7 +43,7 @@ func Register(c *gin.Context) {
 
 	// 生成gravatar
 	email := strings.TrimSpace(strings.ToLower(input.Email))
-	hash := md5.Sum([]byte(email))
+	hash := md5.Sum([]byte(email)) // #nosec G401 -- Gravatar requires MD5, not used for security
 	avatar := fmt.Sprintf("https://www.gravatar.com/avatar/%x", hash)
 
 	// 加密密码
@@ -64,6 +64,7 @@ func Register(c *gin.Context) {
 	_, err = userCollection.InsertOne(ctx, user)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 50001, "error": "注册失败"})
+		utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 		return
 	}
 
@@ -103,13 +104,14 @@ func Login(c *gin.Context) {
 	token, err := utils.GenerateToken(user.Username)
 	if err != nil {
 		c.JSON(500, gin.H{"code": 50002, "error": "生成token失败"})
+		utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 		return
 	}
 
 	// 记录最后一次登录的IP
 	loginIP := c.ClientIP()
 	loginTime := time.Now()
-	userCollection.UpdateOne(
+	_, err = userCollection.UpdateOne(
 		ctx,
 		bson.M{"_id": user.ID},
 		bson.M{"$set": bson.M{
@@ -117,6 +119,11 @@ func Login(c *gin.Context) {
 			"last_login_time": loginTime,
 		}},
 	)
+	if err != nil {
+		c.JSON(500, gin.H{"code": 50003, "error": "更新登录信息失败"})
+		utils.Logger(user.Username, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+		return
+	}
 
 	c.JSON(200, gin.H{"code": 20000, "message": "登录成功", "token": token})
 }
