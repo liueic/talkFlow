@@ -145,7 +145,6 @@ func JoinRoom(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code":    20000,
 		"message": "加入房间成功",
-		"room":    room,
+		"room":    room.ID.Hex(),
 	})
-
 }
