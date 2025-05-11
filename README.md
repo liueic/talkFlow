@@ -13,7 +13,7 @@
 ### 后端
 
 - Gin
-- MongoDB：感觉可以提供可选项，如果用户没有设置则使用内置的SQLite
+- MongoDB
 
 ## 设计思路
 
@@ -44,4 +44,12 @@ POST   /api/v1/auth/login     { username, password } → { token }
 
 # 需带上 Auth 鉴权
 GET    /api/v1/profile
+```
+
+### 聊天相关
+
+```
+# 创建房间（Box）
+POST /api/v1/room/create { name, expire_time} → { code }
+
 ```
