@@ -51,5 +51,5 @@ GET    /api/v1/profile
 ```
 # 创建房间（Box）
 POST /api/v1/room/create { name, expire_time} → { code }
-
+POST /api/v1/room/join   { join_code, visitor_id} → { url }
 ```
