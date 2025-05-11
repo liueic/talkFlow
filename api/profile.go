@@ -15,7 +15,7 @@ func GetProfile(c *gin.Context) {
 	// 获取JWT中的用户名
 	username, exists := c.Get("username")
 	if !exists {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.JSON(401, gin.H{"code": 40101, "error": "未授权"})
 		return
 	}
 

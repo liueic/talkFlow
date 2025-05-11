@@ -21,5 +21,8 @@ func main() {
 	// 获取用户信息
 	r.GET("/api/v1/profile", middleware.JWTAuth(), api.GetProfile)
 
+	// 创建房间
+	r.POST("/api/v1/room/create", middleware.JWTAuth(), api.CreateRoom)
+
 	r.Run(":8080")
 }
