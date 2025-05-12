@@ -89,11 +89,7 @@ func CreateRoom(c *gin.Context) {
 	)
 	if err != nil {
 		var logMsg string
-		if err != nil {
-			logMsg = err.Error()
-		} else {
-			logMsg = ""
-		}
+		logMsg = err.Error()
 		logID, _ := utils.Logger(username.(string), logMsg, time.Now().Format(time.RFC3339), c.ClientIP())
 		c.JSON(500, gin.H{
 			"code":    50001,
