@@ -26,5 +26,13 @@ func main() {
 	// 加入房间
 	r.POST("/api/v1/room/join", api.JoinRoom)
 
+	// ws
+	r.GET("/api/v1/ws", api.TalkHandler)
+	// 清除僵尸房间
+	api.StartRoomCleaner()
+
+	// 测试页面
+	r.StaticFile("/chat.html", "./test/chat.html")
+
 	r.Run(":8080")
 }

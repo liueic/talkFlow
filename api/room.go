@@ -83,12 +83,22 @@ func CreateRoom(c *gin.Context) {
 
 	_, err = roomCollection.InsertOne(ctx, room)
 
-	logID, _ := utils.Logger(username.(string), err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+	var logMsg string
 	if err != nil {
+		logMsg = err.Error()
+	} else {
+		logMsg = ""
+	}
+	logID, _ := utils.Logger(username.(string), logMsg, time.Now().Format(time.RFC3339), c.ClientIP())
+	if err != nil {
+		var hex string
+		if logID != primitive.NilObjectID {
+			hex = logID.Hex()
+		}
 		c.JSON(500, gin.H{
 			"code":   50001,
 			"error":  "创建房间失败",
-			"log_id": logID.Hex(),
+			"log_id": hex,
 		})
 		log.Println("创建房间失败:", err)
 		return
@@ -117,13 +127,14 @@ func JoinRoom(c *gin.Context) {
 	}
 
 	roomCollection := config.DB.Collection("rooms")
+	visitorCollection := config.DB.Collection("visitors") // 新增
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var room models.Room
 	err := roomCollection.FindOne(ctx, bson.M{"join_code": req.JoinCode}).Decode(&room)
 	if err != nil {
-		// 房间不存在
 		c.JSON(404, gin.H{
 			"code":  40401,
 			"error": "房间不存在",
@@ -132,7 +143,6 @@ func JoinRoom(c *gin.Context) {
 		return
 	}
 
-	// 检查房间是否已过期
 	if room.IsEnded() {
 		c.JSON(400, gin.H{
 			"code":  40002,
@@ -142,9 +152,23 @@ func JoinRoom(c *gin.Context) {
 		return
 	}
 
+	// 记录 Visitor
+	visitor := models.Visitor{
+		Username:   req.VisitorID, // 你可以用 VisitorID 作为用户名，或前端传递昵称
+		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
+		VisitorIP:  c.ClientIP(),
+		IsRegister: false,
+	}
+	_, err = visitorCollection.InsertOne(ctx, visitor)
+	if err != nil {
+		log.Println("记录Visitor失败:", err)
+
+	}
+
 	c.JSON(200, gin.H{
 		"code":    20000,
 		"message": "加入房间成功",
 		"room":    room.ID.Hex(),
+		"url":     "/api/v1/ws?join_code=" + req.JoinCode + "&id=" + req.VisitorID,
 	})
 }

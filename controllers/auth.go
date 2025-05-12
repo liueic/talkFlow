@@ -35,7 +35,7 @@ func Register(c *gin.Context) {
 	// 检查用户名是否已存在
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var existingUser models.User
+	var existingUser models.Register
 	err := userCollection.FindOne(ctx, bson.M{"username": input.Username}).Decode(&existingUser)
 	if err == nil {
 		c.JSON(400, gin.H{"error": "用户名已存在"})
@@ -51,7 +51,7 @@ func Register(c *gin.Context) {
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 
 	// 构造User对象
-	user := models.User{
+	user := models.Register{
 		ID:         primitive.NewObjectID(),
 		Username:   input.Username,
 		Password:   string(hashedPassword),
@@ -59,6 +59,7 @@ func Register(c *gin.Context) {
 		Avatar:     avatar,
 		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
 		RegisterIP: c.ClientIP(), // 获取注册IP，依赖Nginx或者Caddy
+		IsRegister: true,
 	}
 
 	// 插入新用户
@@ -89,7 +90,7 @@ func Login(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var user models.User
+	var user models.Register
 	err := userCollection.FindOne(ctx, bson.M{"username": input.Username}).Decode(&user)
 	if err != nil {
 		c.JSON(400, gin.H{"code": 40002, "error": "用户名或密码错误"})

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>语音通话测试（房间模式）</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+      }
+      #status {
+        margin-top: 10px;
+      }
+      .log {
+        color: #555;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🧪 WebSocket 语音房间测试</h1>
+    <p>
+      房间号（join_code）：<input type="text" id="joinCode" value="IQJTM" />
+      你的ID：<input type="text" id="userId" value="userA" />
+    </p>
+    <button id="start">🎤 开始语音</button>
+    <button id="stop">🛑 停止语音</button>
+    <button id="sendSine">📢 发送正弦波音频</button>
+
+    <div id="status">
+      <p>状态：<span id="wsStatus">未连接</span></p>
+      <p>已发送音频块数：<span id="sentCount">0</span></p>
+      <p>已接收音频块数：<span id="recvCount">0</span></p>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <script>
+      let ws;
+      let recorder;
+      let sentCount = 0;
+      let recvCount = 0;
+      let heartbeatInterval;
+
+      const log = (msg) => {
+        const line = document.createElement("div");
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        document.getElementById("log").appendChild(line);
+      };
+
+      const updateStatus = () => {
+        document.getElementById("wsStatus").textContent =
+          ws?.readyState === WebSocket.OPEN ? "已连接" : "未连接";
+        document.getElementById("sentCount").textContent = sentCount;
+        document.getElementById("recvCount").textContent = recvCount;
+      };
+
+      document.getElementById("start").onclick = async () => {
+        const joinCode = document.getElementById("joinCode").value.trim();
+        const userId = document.getElementById("userId").value.trim();
+        if (!joinCode || !userId) {
+          alert("请填写房间号和你的ID");
+          return;
+        }
+
+        ws = new WebSocket(
+          `ws://127.0.0.1:8080/api/v1/ws?join_code=${encodeURIComponent(
+            joinCode
+          )}&id=${encodeURIComponent(userId)}`
+        );
+
+        ws.onopen = async () => {
+          log("WebSocket 连接已建立");
+          updateStatus();
+          // 启动心跳
+          heartbeatInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) ws.send("ping");
+          }, 30000);
+
+          // 只在连接建立后再拿流、启动录音
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+          recorder.ondataavailable = (e) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(e.data);
+              sentCount++;
+              updateStatus();
+            }
+          };
+          recorder.start(200);
+        };
+
+        ws.onclose = (evt) => {
+          log(`WebSocket 关闭，code=${evt.code}，reason=${evt.reason}`);
+          updateStatus();
+          clearInterval(heartbeatInterval);
+        };
+
+        ws.onerror = (e) => {
+          log("WebSocket 错误：" + e);
+          updateStatus();
+        };
+
+        ws.onmessage = async (event) => {
+          log(
+            "收到音频数据，类型：" +
+              typeof event.data +
+              " 大小：" +
+              (event.data.size || 0)
+          );
+          try {
+            const blob = new Blob([event.data], { type: "audio/webm" });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.play();
+            recvCount++;
+            updateStatus();
+          } catch (err) {
+            log("接收音频播放失败：" + err);
+          }
+        };
+
+        // 获取麦克风音频
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+        recorder.ondataavailable = (e) => {
+          log("录音数据可用，大小：" + e.data.size);
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(e.data);
+            sentCount++;
+            updateStatus();
+          }
+        };
+
+        recorder.start(200); // 每200ms发送一次数据
+      };
+
+      document.getElementById("stop").onclick = () => {
+        recorder?.stop();
+        ws?.close();
+        log("停止通话");
+      };
+
+      document.getElementById("sendSine").onclick = async () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          log("WebSocket 未连接，无法发送测试音频");
+          return;
+        }
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const duration = 1; // 秒
+        const sampleRate = ctx.sampleRate;
+        const frameCount = sampleRate * duration;
+        const buffer = ctx.createBuffer(1, frameCount, sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < frameCount; i++) {
+          data[i] = Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 0.5;
+        }
+        const dest = ctx.createMediaStreamDestination();
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(dest);
+        source.start();
+
+        const recorder = new MediaRecorder(dest.stream, {
+          mimeType: "audio/webm",
+        });
+        recorder.ondataavailable = (e) => {
+          log("发送正弦波音频，大小：" + e.data.size);
+          ws.send(e.data);
+          sentCount++;
+          updateStatus();
+        };
+        recorder.start();
+        setTimeout(() => {
+          recorder.stop();
+          ctx.close();
+        }, duration * 1000 + 100);
+      };
+    </script>
+  </body>
+</html>
