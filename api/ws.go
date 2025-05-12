@@ -2,15 +2,16 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"go.mongodb.org/mongo-driver/bson"
 
 	"talkFlow/config"
+	"talkFlow/models"
 )
 
 var upgrader = websocket.Upgrader{
@@ -39,24 +40,39 @@ func TalkHandler(c *gin.Context) {
 	roomID := c.Query("join_code")
 	userID := c.Query("id")
 
-	// 校验房间是否有效
-	roomCollection := config.DB.Collection("rooms")
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var room struct {
-		ExpireTime time.Time `bson:"expire_time"`
-		Status     int       `bson:"status"`
-	}
-	err := roomCollection.FindOne(ctx, bson.M{"join_code": roomID}).Decode(&room)
-	if err != nil || room.Status != 0 || room.ExpireTime.Before(time.Now()) {
-		c.JSON(400, gin.H{"error": "房间不存在或已过期"})
+	// 查询房间信息到 room 结构体
+	var room models.Room
+	roomSQL := `SELECT id, creater, name, joiner, join_code, create_time, expire_time, status, ip FROM rooms WHERE join_code = ?`
+	err := config.DB.QueryRowContext(ctx, roomSQL, roomID).Scan(
+		&room.ID,
+		&room.Creater,
+		&room.Name,
+		&room.JoinerStr, // 先用字符串接收
+		&room.JoinCode,
+		&room.CreateTime,
+		&room.ExpireTime,
+		&room.Status,
+		&room.IP,
+	)
+	if err != nil {
+		c.JSON(404, gin.H{
+			"code":  40401,
+			"error": "房间不存在",
+		})
+		log.Println("房间不存在:", roomID)
 		return
 	}
-
 	// 升级为 WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		log.Printf("WebSocket升级失败: %v\n", err)
+		c.JSON(500, gin.H{
+			"code":  50001,
+			"error": err.Error(),
+		})
 		return
 	}
 
@@ -165,29 +181,62 @@ func (c *Client) cleanup() {
 	})
 }
 
+func TestWSHandler(c *gin.Context) {
+	log.Println("收到 WebSocket 测试连接请求")
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Printf("WebSocket 测试连接失败: %v", err)
+		return
+	}
+
+	log.Println("WebSocket 测试连接成功!")
+
+	defer conn.Close()
+
+	// 简单的 echo 服务
+	for {
+		messageType, p, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("读取消息失败:", err)
+			return
+		}
+		log.Printf("收到消息: %s", string(p))
+
+		if err := conn.WriteMessage(messageType, p); err != nil {
+			log.Println("发送消息失败:", err)
+			return
+		}
+	}
+}
+
 // 定时清理已过期房间（main 启动时调用一次即可）
 func StartRoomCleaner() {
 	go func() {
 		for {
 			time.Sleep(time.Minute)
-			roomCollection := config.DB.Collection("rooms")
 
 			Hub.lock.Lock()
 			for roomID, users := range Hub.rooms {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				var room struct {
-					ExpireTime time.Time `bson:"expire_time"`
-					Status     int       `bson:"status"`
-				}
-				err := roomCollection.FindOne(ctx, bson.M{"join_code": roomID}).Decode(&room)
-				cancel()
+				func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
 
-				if err != nil || room.Status != 0 || room.ExpireTime.Before(time.Now()) {
-					for _, client := range users {
-						client.conn.Close()
+					// 查询房间的过期时间和状态
+					var expireTime time.Time
+					var status int
+					query := `SELECT expire_time, status FROM rooms WHERE join_code = ?`
+					err := config.DB.QueryRowContext(ctx, query, roomID).Scan(&expireTime, &status)
+
+					// 如果查不到房间、房间已结束或已过期，则关闭所有连接并移除房间
+					if err != nil || status != int(models.RoomOngoing) || expireTime.Before(time.Now()) {
+						for _, client := range users {
+							client.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "房间已过期或已结束"))
+							client.conn.Close()
+						}
+						delete(Hub.rooms, roomID)
 					}
-					delete(Hub.rooms, roomID)
-				}
+				}()
 			}
 			Hub.lock.Unlock()
 		}

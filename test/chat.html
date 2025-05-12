@@ -99,7 +99,7 @@
         };
 
         ws.onerror = (e) => {
-          log("WebSocket 错误：" + e);
+          log("WebSocket 错误. 查看浏览器控制台获取详细信息. Event type: " + e.type);
           updateStatus();
         };
 
@@ -121,23 +121,6 @@
             log("接收音频播放失败：" + err);
           }
         };
-
-        // 获取麦克风音频
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-
-        recorder.ondataavailable = (e) => {
-          log("录音数据可用，大小：" + e.data.size);
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(e.data);
-            sentCount++;
-            updateStatus();
-          }
-        };
-
-        recorder.start(200); // 每200ms发送一次数据
       };
 
       document.getElementById("stop").onclick = () => {

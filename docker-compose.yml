@@ -1,24 +1,16 @@
 services:
-  db:
-    image: mongodb/mongodb-community-server
-    container_name: mongodb
-    ports:
-      - "27017:27017"
-    restart: unless-stopped
-    networks:
-      - talkflow-network
-
   app:
     image: ghcr.io/liueic/talkflow:latest
     container_name: talkflow
     ports:
       - "8080:8080"
+    volumes:
+      - ./talkflow:/app
     restart: unless-stopped
     networks:
       - talkflow-network
     depends_on:
       - db
     environment:
-      - MONGODB_URI=mongodb://db:27017
       - DBNAME=talkflow
       - JWT_SECRET=c92fe4842227794cec37a3c1f5d8bd9c044523ca7a6aa7abfad64b4ecabee9fc

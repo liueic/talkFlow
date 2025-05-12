@@ -2,41 +2,40 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"talkFlow/config"
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type LogEntry struct {
-	Username  string `bson:"username"`
-	Error     string `bson:"error"`
-	Timestamp string `bson:"timestamp"`
-	IP        string `bson:"ip"`
+	Username  string
+	Error     string
+	Timestamp string
+	IP        string
 }
 
-// 记录日志到MongoDB，并返回ObjectID
-func Logger(username, errMsg, timestamp, ip string) (primitive.ObjectID, error) {
-	logCollection := config.DB.Collection("log")
-
-	logEntry := LogEntry{
-		Username:  username,
-		Error:     errMsg,
-		Timestamp: timestamp,
-		IP:        ip,
-	}
-
+// 记录日志到SQLite，并返回插入的行ID和错误
+func Logger(username, errMsg, timestamp, ip string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := logCollection.InsertOne(ctx, logEntry)
-	if err != nil {
-		return primitive.NilObjectID, err
+	insertSQL := `
+        INSERT INTO log (username, error, timestamp, ip)
+        VALUES (?, ?, ?, ?)
+    `
+	// 检查 config.DB 是否为 nil，防止空指针异常
+	if config.DB == nil {
+		return 0, errors.New("database is not initialized")
 	}
 
-	id, ok := result.InsertedID.(primitive.ObjectID)
-	if !ok {
-		return primitive.NilObjectID, err
+	result, err := config.DB.ExecContext(ctx, insertSQL, username, errMsg, timestamp, ip)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
 	}
 	return id, nil
 }

@@ -2,8 +2,6 @@ package models
 
 import (
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type RoomStatus int
@@ -14,23 +12,24 @@ const (
 )
 
 type Room struct {
-	ID         primitive.ObjectID `bson:"_id,omitempty"`
-	Name       string             `bson:"name"`
-	Creater    string             `bson:"creater"`
-	Joiner     []string           `bson:"joiner"`
-	JoinCode   string             `bson:"join_code"`
-	CreateTime primitive.DateTime `bson:"create_time"`
-	ExpireTime primitive.DateTime `bson:"expire_time"`
-	Status     RoomStatus         `bson:"status"` // 0: 进行中, 1: 已结束
-	IP         string             `bson:"ip"`
+	ID         int64      `json:"id" db:"id"`
+	Name       string     `json:"name" db:"name"`
+	Creater    string     `json:"creater" db:"creater"`
+	Joiner     []string   `json:"joiner" db:"-"`
+	JoinerStr  string     `json:"-" db:"joiner"` // 用于数据库读写
+	JoinCode   string     `json:"join_code" db:"join_code"`
+	CreateTime time.Time  `json:"create_time" db:"create_time"`
+	ExpireTime time.Time  `json:"expire_time" db:"expire_time"`
+	Status     RoomStatus `json:"status" db:"status"`
+	IP         string     `json:"ip" db:"ip"`
 }
 
 func (r *Room) IsOngoing() bool {
-	now := primitive.NewDateTimeFromTime(time.Now())
-	return r.Status == RoomOngoing && now < r.ExpireTime
+	now := time.Now()
+	return r.Status == RoomOngoing && now.Before(r.ExpireTime)
 }
 
 func (r *Room) IsEnded() bool {
-	now := primitive.NewDateTimeFromTime(time.Now())
-	return r.Status == RoomEnded || now >= r.ExpireTime
+	now := time.Now()
+	return r.Status == RoomEnded || now.After(r.ExpireTime)
 }

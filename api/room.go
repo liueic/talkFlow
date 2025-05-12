@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // 生成房间的随机号
@@ -34,7 +32,6 @@ type CreateRoomRequest struct {
 }
 
 func CreateRoom(c *gin.Context) {
-	roomCollection := config.DB.Collection("rooms")
 
 	var req CreateRoomRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -65,9 +62,6 @@ func CreateRoom(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	JoinCode := randomJoinCode(5)
 
 	room := models.Room{
@@ -75,30 +69,36 @@ func CreateRoom(c *gin.Context) {
 		Name:       req.Name,
 		Joiner:     []string{username.(string)},
 		JoinCode:   JoinCode,
-		CreateTime: primitive.NewDateTimeFromTime(time.Now()),
-		ExpireTime: primitive.NewDateTimeFromTime(time.Now().Add(time.Duration(expireMinutes) * time.Minute)), // 过期时间
-		Status:     models.RoomOngoing,                                                                        // 0: 进行中
-		IP:         c.ClientIP(),                                                                              // 获取创建房间的IP
+		CreateTime: time.Now(),
+		ExpireTime: time.Now().Add(time.Duration(expireMinutes) * time.Minute), // 过期时间
+		Status:     models.RoomOngoing,                                         // 0: 进行中
+		IP:         c.ClientIP(),                                               // 获取创建房间的IP
 	}
 
-	_, err = roomCollection.InsertOne(ctx, room)
+	insertSQL := `
+		INSERT INTO rooms (creater, name, joiner, join_code, create_time, expire_time, status, ip)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
 
-	var logMsg string
+	// 将 joiner 字段（string slice）序列化为字符串存储到数据库
+	joinerStr := strings.Join(room.Joiner, ",")
+
+	_, err = config.DB.ExecContext(context.Background(), insertSQL,
+		room.Creater, room.Name, joinerStr, room.JoinCode,
+		room.CreateTime, room.ExpireTime, room.Status, room.IP,
+	)
 	if err != nil {
-		logMsg = err.Error()
-	} else {
-		logMsg = ""
-	}
-	logID, _ := utils.Logger(username.(string), logMsg, time.Now().Format(time.RFC3339), c.ClientIP())
-	if err != nil {
-		var hex string
-		if logID != primitive.NilObjectID {
-			hex = logID.Hex()
+		var logMsg string
+		if err != nil {
+			logMsg = err.Error()
+		} else {
+			logMsg = ""
 		}
+		logID, _ := utils.Logger(username.(string), logMsg, time.Now().Format(time.RFC3339), c.ClientIP())
 		c.JSON(500, gin.H{
-			"code":   50001,
-			"error":  "创建房间失败",
-			"log_id": hex,
+			"code":    50001,
+			"error":   "创建房间失败",
+			"eventID": logID,
 		})
 		log.Println("创建房间失败:", err)
 		return
@@ -115,6 +115,7 @@ func CreateRoom(c *gin.Context) {
 // 用户ID依赖前端通过浏览器指纹进行收集
 func JoinRoom(c *gin.Context) {
 
+	// 不需要提前声明 room 或 visitor 变量
 	var req struct {
 		JoinCode  string `json:"join_code" binding:"required"`
 		VisitorID string `json:"visitor_id" binding:"required"`
@@ -126,15 +127,14 @@ func JoinRoom(c *gin.Context) {
 		return
 	}
 
-	roomCollection := config.DB.Collection("rooms")
-	visitorCollection := config.DB.Collection("visitors") // 新增
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var room models.Room
-	err := roomCollection.FindOne(ctx, bson.M{"join_code": req.JoinCode}).Decode(&room)
-	if err != nil {
+	var existingRoom int
+	checkRoomSQL := `SELECT COUNT(*) FROM rooms WHERE join_code = ?`
+	err := config.DB.QueryRowContext(ctx, checkRoomSQL, req.JoinCode).Scan(&existingRoom)
+
+	if err != nil || existingRoom == 0 {
 		c.JSON(404, gin.H{
 			"code":  40401,
 			"error": "房间不存在",
@@ -143,32 +143,88 @@ func JoinRoom(c *gin.Context) {
 		return
 	}
 
-	if room.IsEnded() {
+	// 这里如果需要判断房间是否结束，应该先查出房间的 status 字段
+	var status int
+	statusSQL := `SELECT status FROM rooms WHERE join_code = ?`
+	err = config.DB.QueryRowContext(ctx, statusSQL, req.JoinCode).Scan(&status)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"code":  50002,
+			"error": "查询房间状态失败",
+		})
+		log.Println("查询房间状态失败:", err)
+		return
+	}
+
+	// 查询房间信息到 room 结构体
+	var room models.Room
+	roomSQL := `SELECT id, creater, name, joiner, join_code, create_time, expire_time, status, ip FROM rooms WHERE join_code = ?`
+	err = config.DB.QueryRowContext(ctx, roomSQL, req.JoinCode).Scan(
+		&room.ID,
+		&room.Creater,
+		&room.Name,
+		&room.JoinerStr, // 先用字符串接收
+		&room.JoinCode,
+		&room.CreateTime,
+		&room.ExpireTime,
+		&room.Status,
+		&room.IP,
+	)
+	if err != nil {
+		c.JSON(404, gin.H{
+			"code":  40401,
+			"error": "房间不存在",
+		})
+		log.Println("房间不存在:", req.JoinCode)
+		return
+	}
+	// 反序列化 joiner 字段
+	room.Joiner = strings.Split(room.JoinerStr, ",")
+
+	// 查询房间信息到 room 结构体后
+	if !room.IsOngoing() {
 		c.JSON(400, gin.H{
 			"code":  40002,
 			"error": "房间已结束",
 		})
-		log.Println("房间已结束:", room.ID.Hex())
+		log.Println("房间已结束:", room.ID)
 		return
 	}
 
-	// 记录 Visitor
-	visitor := models.Visitor{
-		Username:   req.VisitorID, // 你可以用 VisitorID 作为用户名，或前端传递昵称
-		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
-		VisitorIP:  c.ClientIP(),
-		IsRegister: false,
-	}
-	_, err = visitorCollection.InsertOne(ctx, visitor)
+	insertVisitorSQL := `
+        INSERT INTO visitors (visitor_id, created_at, visitor_ip, is_register)
+        VALUES (?, ?, ?, ?)
+    `
+	_, err = config.DB.ExecContext(ctx, insertVisitorSQL, req.VisitorID, time.Now(), c.ClientIP(), false)
 	if err != nil {
-		log.Println("记录Visitor失败:", err)
+		logID, _ := utils.Logger(req.VisitorID, err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
+		log.Println("记录访客失败:", err)
 
+		c.JSON(500, gin.H{
+			"code":    50001,
+			"error":   "记录访客失败",
+			"eventID": logID,
+		})
+		return
+	}
+
+	// 查询房间ID（假设rooms表有id字段且为INTEGER PRIMARY KEY AUTOINCREMENT）
+	var roomID int64
+	getRoomIDSQL := `SELECT id FROM rooms WHERE join_code = ?`
+	err = config.DB.QueryRowContext(ctx, getRoomIDSQL, req.JoinCode).Scan(&roomID)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"code":  50003,
+			"error": "获取房间ID失败",
+		})
+		log.Println("获取房间ID失败:", err)
+		return
 	}
 
 	c.JSON(200, gin.H{
 		"code":    20000,
 		"message": "加入房间成功",
-		"room":    room.ID.Hex(),
+		"room":    roomID,
 		"url":     "/api/v1/ws?join_code=" + req.JoinCode + "&id=" + req.VisitorID,
 	})
 }

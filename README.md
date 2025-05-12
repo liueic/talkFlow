@@ -15,7 +15,6 @@
 ### 后端
 
 - Gin
-- MongoDB
 
 ## 设计思路
 
@@ -26,8 +25,6 @@
 talkFlow 同样可以允许用户通过简单的方式来进行开黑，只需要用户生成一个邀请码，然后在主页里面输入，即可进入群聊，邀请码具有时效性，而且管理员可以设置谁可以生成验证码，确保私域性
 
 ## 开发
-
-需要自行在本地配置好 MongoDB 环境，并且设置好 `JWT_SECRET`
 
 ```bash
 cp .env.example .env
@@ -64,3 +61,10 @@ POST /api/v1/room/create { name, expire_time } → { code }
 POST /api/v1/room/join   { join_code, visitor_id } → { url }
 GET  /api/v1/ws          { join_code, visitor_id }
 ```
+
+## 开发日志
+
+- [x] 用户的注册和登录
+- [x] 聊天频道的创建（Box）
+- [x] 从 MongoDB 迁移到 SQLite
+- [ ] WebSocket 实现
