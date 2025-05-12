@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 func GetProfile(c *gin.Context) {
@@ -20,22 +19,32 @@ func GetProfile(c *gin.Context) {
 		return
 	}
 
-	userCollection := config.DB.Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var user models.Register
-	err := userCollection.FindOne(ctx, bson.M{"username": username.(string)}).Decode(&user)
+	query := `SELECT id, username, email, avatar FROM register WHERE username = ?`
+	err := config.DB.QueryRowContext(ctx, query, username.(string)).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.Avatar,
+	)
 	if err != nil {
 		logID, _ := utils.Logger(username.(string), err.Error(), time.Now().Format(time.RFC3339), c.ClientIP())
 		c.JSON(500, gin.H{
 			"code":   50001,
 			"error":  "获取用户信息失败",
-			"log_id": logID.Hex(), // 返回日志ID
+			"log_id": logID,
 		})
 		log.Println("获取用户信息失败:", err)
 		return
 	}
 
-	c.JSON(200, gin.H{"code": 20000, "username": user.Username, "email": user.Email, "avatar": user.Avatar})
+	c.JSON(200, gin.H{
+		"code":     20000,
+		"username": user.Username,
+		"email":    user.Email,
+		"avatar":   user.Avatar,
+	})
 }

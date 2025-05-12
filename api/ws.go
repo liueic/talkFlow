@@ -2,15 +2,16 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"go.mongodb.org/mongo-driver/bson"
 
 	"talkFlow/config"
+	"talkFlow/models"
 )
 
 var upgrader = websocket.Upgrader{
@@ -39,21 +40,31 @@ func TalkHandler(c *gin.Context) {
 	roomID := c.Query("join_code")
 	userID := c.Query("id")
 
-	// 校验房间是否有效
-	roomCollection := config.DB.Collection("rooms")
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var room struct {
-		ExpireTime time.Time `bson:"expire_time"`
-		Status     int       `bson:"status"`
-	}
-	err := roomCollection.FindOne(ctx, bson.M{"join_code": roomID}).Decode(&room)
-	if err != nil || room.Status != 0 || room.ExpireTime.Before(time.Now()) {
-		c.JSON(400, gin.H{"error": "房间不存在或已过期"})
+	// 查询房间信息到 room 结构体
+	var room models.Room
+	roomSQL := `SELECT id, creater, name, joiner, join_code, create_time, expire_time, status, ip FROM rooms WHERE join_code = ?`
+	err := config.DB.QueryRowContext(ctx, roomSQL, roomID).Scan(
+		&room.ID,
+		&room.Creater,
+		&room.Name,
+		&room.JoinerStr, // 先用字符串接收
+		&room.JoinCode,
+		&room.CreateTime,
+		&room.ExpireTime,
+		&room.Status,
+		&room.IP,
+	)
+	if err != nil {
+		c.JSON(404, gin.H{
+			"code":  40401,
+			"error": "房间不存在",
+		})
+		log.Println("房间不存在:", roomID)
 		return
 	}
-
 	// 升级为 WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -170,19 +181,20 @@ func StartRoomCleaner() {
 	go func() {
 		for {
 			time.Sleep(time.Minute)
-			roomCollection := config.DB.Collection("rooms")
 
 			Hub.lock.Lock()
 			for roomID, users := range Hub.rooms {
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				var room struct {
-					ExpireTime time.Time `bson:"expire_time"`
-					Status     int       `bson:"status"`
-				}
-				err := roomCollection.FindOne(ctx, bson.M{"join_code": roomID}).Decode(&room)
-				cancel()
+				defer cancel()
 
-				if err != nil || room.Status != 0 || room.ExpireTime.Before(time.Now()) {
+				// 查询房间的过期时间和状态
+				var expireTime time.Time
+				var status int
+				query := `SELECT expire_time, status FROM rooms WHERE join_code = ?`
+				err := config.DB.QueryRowContext(ctx, query, roomID).Scan(&expireTime, &status)
+
+				// 如果查不到房间、房间已结束或已过期，则关闭所有连接并移除房间
+				if err != nil || status != int(models.RoomOngoing) || expireTime.Before(time.Now()) {
 					for _, client := range users {
 						client.conn.Close()
 					}

@@ -11,7 +11,8 @@ import (
 
 func main() {
 	config.InitEnv()
-	config.InitMongoDB()
+	config.InitSQLite()
+	config.InitTables()
 
 	r := gin.Default()
 
