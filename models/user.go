@@ -20,7 +20,7 @@ type Register struct {
 
 type Visitor struct {
 	ID         int64     `json:"id" db:"id"`
-	Username   string    `json:"username" db:"username"`
+	VisitorID  string    `json:"visitor_id" db:"visitor_id"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 	VisitorIP  string    `json:"visitor_ip" db:"visitor_ip"`
 	IsRegister bool      `json:"is_register" db:"is_register"`

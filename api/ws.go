@@ -68,6 +68,11 @@ func TalkHandler(c *gin.Context) {
 	// 升级为 WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		log.Printf("WebSocket升级失败: %v\n", err)
+		c.JSON(500, gin.H{
+			"code":  50001,
+			"error": err.Error(),
+		})
 		return
 	}
 
@@ -176,6 +181,35 @@ func (c *Client) cleanup() {
 	})
 }
 
+func TestWSHandler(c *gin.Context) {
+	log.Println("收到 WebSocket 测试连接请求")
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Printf("WebSocket 测试连接失败: %v", err)
+		return
+	}
+
+	log.Println("WebSocket 测试连接成功!")
+
+	defer conn.Close()
+
+	// 简单的 echo 服务
+	for {
+		messageType, p, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("读取消息失败:", err)
+			return
+		}
+		log.Printf("收到消息: %s", string(p))
+
+		if err := conn.WriteMessage(messageType, p); err != nil {
+			log.Println("发送消息失败:", err)
+			return
+		}
+	}
+}
+
 // 定时清理已过期房间（main 启动时调用一次即可）
 func StartRoomCleaner() {
 	go func() {
@@ -184,22 +218,25 @@ func StartRoomCleaner() {
 
 			Hub.lock.Lock()
 			for roomID, users := range Hub.rooms {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
+				func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
 
-				// 查询房间的过期时间和状态
-				var expireTime time.Time
-				var status int
-				query := `SELECT expire_time, status FROM rooms WHERE join_code = ?`
-				err := config.DB.QueryRowContext(ctx, query, roomID).Scan(&expireTime, &status)
+					// 查询房间的过期时间和状态
+					var expireTime time.Time
+					var status int
+					query := `SELECT expire_time, status FROM rooms WHERE join_code = ?`
+					err := config.DB.QueryRowContext(ctx, query, roomID).Scan(&expireTime, &status)
 
-				// 如果查不到房间、房间已结束或已过期，则关闭所有连接并移除房间
-				if err != nil || status != int(models.RoomOngoing) || expireTime.Before(time.Now()) {
-					for _, client := range users {
-						client.conn.Close()
+					// 如果查不到房间、房间已结束或已过期，则关闭所有连接并移除房间
+					if err != nil || status != int(models.RoomOngoing) || expireTime.Before(time.Now()) {
+						for _, client := range users {
+							client.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "房间已过期或已结束"))
+							client.conn.Close()
+						}
+						delete(Hub.rooms, roomID)
 					}
-					delete(Hub.rooms, roomID)
-				}
+				}()
 			}
 			Hub.lock.Unlock()
 		}

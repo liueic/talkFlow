@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebSocket 测试</title>
+</head>
+<body>
+  <h2>WebSocket 测试</h2>
+  <div id="status">未连接</div>
+  <button onclick="connect()">连接</button>
+  <button onclick="sendMessage()">发送消息</button>
+  <div id="messages"></div>
+  
+  <script>
+    let ws;
+    
+    function connect() {
+      ws = new WebSocket('ws://localhost:8080/api/v1/ws-test');
+      
+      ws.onopen = function() {
+        document.getElementById('status').textContent = '已连接';
+        console.log('连接已建立');
+      };
+      
+      ws.onmessage = function(e) {
+        console.log('收到消息:', e.data);
+        document.getElementById('messages').innerHTML += '<p>收到: ' + e.data + '</p>';
+      };
+      
+      ws.onerror = function(e) {
+        console.error('WebSocket 错误:', e);
+        document.getElementById('status').textContent = '错误: ' + e;
+      };
+      
+      ws.onclose = function(e) {
+        console.log('连接已关闭', e.code, e.reason);
+        document.getElementById('status').textContent = '已关闭 (code: ' + e.code + ')';
+      };
+    }
+    
+    function sendMessage() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('测试消息 ' + new Date().toISOString());
+      } else {
+        alert('WebSocket 未连接');
+      }
+    }
+  </script>
+</body>
+</html>

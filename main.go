@@ -34,6 +34,8 @@ func main() {
 
 	// 测试页面
 	r.StaticFile("/chat.html", "./test/chat.html")
+	r.GET("/api/v1/ws-test", api.TestWSHandler)
+	r.StaticFile("/ws.html", "./test/ws.html")
 
 	r.Run(":8080")
 }

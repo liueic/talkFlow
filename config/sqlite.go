@@ -71,13 +71,13 @@ func InitTables() {
         last_login_time DATETIME
     );`
 	createVisitorTable := `
-	CREATE TABLE IF NOT EXISTS visitor (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT,
-    created_at DATETIME,
-    visitor_ip TEXT,
-    is_register BOOLEAN
-);`
+    CREATE TABLE IF NOT EXISTS visitor (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        visitor_id TEXT,
+        created_at DATETIME,
+        visitor_ip TEXT,
+        is_register BOOLEAN
+    );`
 	createLogTable := `
     CREATE TABLE IF NOT EXISTS log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,6 +86,19 @@ func InitTables() {
         timestamp TEXT,
         ip TEXT
     );`
+	createRoomTable := `
+    CREATE TABLE IF NOT EXISTS rooms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        creater TEXT,
+        joiner TEXT,
+        join_code TEXT,
+        create_time DATETIME,
+        expire_time DATETIME,
+        status INTEGER,
+        ip TEXT
+    );`
+
 	_, err := DB.Exec(createRegisterTable)
 	if err != nil {
 		log.Fatalf("创建 register 表失败: %v", err)
@@ -99,6 +112,11 @@ func InitTables() {
 	_, err = DB.Exec(createLogTable)
 	if err != nil {
 		log.Fatalf("创建 log 表失败: %v", err)
+	}
+
+	_, err = DB.Exec(createRoomTable)
+	if err != nil {
+		log.Fatalf("创建 rooms 表失败: %v", err)
 	}
 }
 
