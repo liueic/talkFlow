@@ -89,7 +89,11 @@ func CreateRoom(c *gin.Context) {
 	)
 	if err != nil {
 		var logMsg string
-		logMsg = err.Error()
+		if err != nil {
+			logMsg = err.Error()
+		} else {
+			logMsg = ""
+		}
 		logID, _ := utils.Logger(username.(string), logMsg, time.Now().Format(time.RFC3339), c.ClientIP())
 		c.JSON(500, gin.H{
 			"code":    50001,
@@ -139,6 +143,19 @@ func JoinRoom(c *gin.Context) {
 		return
 	}
 
+	// 这里如果需要判断房间是否结束，应该先查出房间的 status 字段
+	var status int
+	statusSQL := `SELECT status FROM rooms WHERE join_code = ?`
+	err = config.DB.QueryRowContext(ctx, statusSQL, req.JoinCode).Scan(&status)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"code":  50002,
+			"error": "查询房间状态失败",
+		})
+		log.Println("查询房间状态失败:", err)
+		return
+	}
+
 	// 查询房间信息到 room 结构体
 	var room models.Room
 	roomSQL := `SELECT id, creater, name, joiner, join_code, create_time, expire_time, status, ip FROM rooms WHERE join_code = ?`
@@ -175,7 +192,7 @@ func JoinRoom(c *gin.Context) {
 	}
 
 	insertVisitorSQL := `
-        INSERT INTO visitor (visitor_id, created_at, visitor_ip, is_register)
+        INSERT INTO visitors (visitor_id, created_at, visitor_ip, is_register)
         VALUES (?, ?, ?, ?)
     `
 	_, err = config.DB.ExecContext(ctx, insertVisitorSQL, req.VisitorID, time.Now(), c.ClientIP(), false)
