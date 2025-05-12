@@ -4,15 +4,18 @@ services:
     container_name: mongodb
     ports:
       - "27017:27017"
-    restart: always
+    restart: unless-stopped
+    networks:
+      - talkflow-network
 
   app:
-    build:
-      context: .
-      dockerfile: dockerfile
-    container_name: talkflow-app
+    image: ghcr.io/liueic/talkflow:latest
+    container_name: talkflow
     ports:
       - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - talkflow-network
     depends_on:
       - db
     environment:

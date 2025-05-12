@@ -39,6 +39,12 @@ go run main.go
 
 后端的 API 文档托管在：https://talkflow.apifox.cn
 
+目前已经提供了 Docker 镜像，如何要在本地测试的话可以直接使用：
+
+```bash
+docker compose up -d
+```
+
 ### 用户相关
 
 ```
