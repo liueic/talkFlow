@@ -192,7 +192,7 @@ func JoinRoom(c *gin.Context) {
 	}
 
 	insertVisitorSQL := `
-        INSERT INTO visitors (visitor_id, created_at, visitor_ip, is_register)
+        INSERT INTO visitor (visitor_id, created_at, visitor_ip, is_register)
         VALUES (?, ?, ?, ?)
     `
 	_, err = config.DB.ExecContext(ctx, insertVisitorSQL, req.VisitorID, time.Now(), c.ClientIP(), false)
